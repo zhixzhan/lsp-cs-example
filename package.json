@@ -6,6 +6,7 @@
     "vscode": "^1.25"
   },
   "scripts": {
+    "build": "webpack",
     "start:client": "webpack-dev-server",
     "start:server": "ts-node src/server/server.ts"
   },

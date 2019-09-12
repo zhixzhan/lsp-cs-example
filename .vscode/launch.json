@@ -7,6 +7,31 @@
     {
       "type": "node",
       "request": "launch",
+      "name": "Launch Client",
+      "program": "${workspaceFolder}/node_modules/webpack-dev-server/bin/webpack-dev-server.js",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "args": [],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ]
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Launch Chrome",
+      "url": "http://localhost:8080",
+      "webRoot": "${workspaceFolder}/dist"
+    },
+    {
+      "type": "chrome",
+      "request": "attach",
+      "name": "Attach to Chrome",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/dist"
+    },
+    {
+      "type": "node",
+      "request": "launch",
       "name": "Launch Server",
       "runtimeArgs": [
         "-r",
