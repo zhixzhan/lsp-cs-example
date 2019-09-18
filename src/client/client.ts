@@ -19,18 +19,51 @@ monaco.languages.register({
     mimetypes: ['application/json'],
 });
 
+declare global {
+    interface Window { lspclient: any; }
+}
+
 // create Monaco editor
-const value = `{
+
+const files = [
+    {
+        uri: 'inmemory://model1.json',
+        LUISAuthoringKey: '',
+        language: 'json',
+        value: `{
     "$schema": "http://json.schemastore.org/coffeelint",
     "line_endings": "unix"
-}`;
+}`
+    },
+    {
+        uri: 'inmemory://model2.json',
+        LUISAuthoringKey: '0d4991873f334685a9686d1b48e0ff48',
+        language: 'json',
+        value: `{
+    "$schema": "http://json.schemastore.org/coffeelint",
+    "line_endings": "linux"
+}`
+    }
+];
+
+const models = files.map(file => {
+    const {value, language, uri} = file;
+    return monaco.editor.createModel(value, language, monaco.Uri.parse(uri))
+})
+let modelIdx = 0;
+
 const editor = monaco.editor.create(document.getElementById("container")!, {
-    model: monaco.editor.createModel(value, 'json', monaco.Uri.parse('inmemory://model.json')),
+    model: models[modelIdx],
     glyphMargin: true,
     lightbulb: {
         enabled: true
     }
 });
+
+document.getElementById('button').onclick = () => {
+    modelIdx = modelIdx === 0 ? 1 : 0;
+    editor.setModel(models[modelIdx]);
+}
 
 // install Monaco language client services
 MonacoServices.install(editor);
@@ -44,10 +77,24 @@ listen({
     onConnection: connection => {
         // create and start the language client
         const languageClient = createLanguageClient(connection);
+        window.lspclient = languageClient;
+        initializeLuisKeys(languageClient);
         const disposable = languageClient.start();
         connection.onClose(() => disposable.dispose());
     }
 });
+
+async function initializeLuisKeys(languageClient) {
+    const data = files.map( file => {
+        const {uri, LUISAuthoringKey} = file;
+        return {
+            textDocument: {uri},
+            LUISAuthoringKey
+        }
+    } )
+    await languageClient.onReady()
+    languageClient.sendRequest('initializeLuis', {data})
+}
 
 function createLanguageClient(connection: MessageConnection): MonacoLanguageClient {
     return new MonacoLanguageClient({
@@ -59,6 +106,10 @@ function createLanguageClient(connection: MessageConnection): MonacoLanguageClie
             errorHandler: {
                 error: () => ErrorAction.Continue,
                 closed: () => CloseAction.DoNotRestart
+            },
+            initializationOptions: () => {
+                console.log('initialization options');
+                console.log(window.lspclient.state)
             }
         },
         // create a language client connection from the JSON RPC connection on demand

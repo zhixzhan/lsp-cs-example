@@ -14,6 +14,8 @@ import {
 import { TextDocumentPositionParams, DocumentRangeFormattingParams, ExecuteCommandParams, CodeActionParams, FoldingRangeRequestParam, DocumentColorParams, ColorPresentationParams } from 'vscode-languageserver-protocol';
 import { getLanguageService, LanguageService, JSONDocument } from "vscode-json-languageservice";
 
+import { debounce } from 'lodash';
+
 export function start(reader: MessageReader, writer: MessageWriter): JsonServer {
     const connection = createConnection(reader, writer);
     const server = new JsonServer(connection);
@@ -21,11 +23,20 @@ export function start(reader: MessageReader, writer: MessageWriter): JsonServer 
     return server;
 }
 
+const InitializeLuisMethodName = 'initializeLuis';
+
+interface DocumentKeys {
+    uri: string,
+    key: string
+}
+
 export class JsonServer {
 
     protected workspaceRoot: URI | undefined;
 
     protected readonly documents = new TextDocuments();
+
+    protected documentsKeys: DocumentKeys[] = [];
 
     protected readonly jsonService: LanguageService = getLanguageService({
         schemaRequestService: this.resovleSchema.bind(this)
@@ -101,6 +112,18 @@ export class JsonServer {
         this.connection.onFoldingRanges(params =>
             this.getFoldingRanges(params)
         );
+
+        this.connection.onRequest( (method, params) => {
+            if(InitializeLuisMethodName === method) {
+                const keys = params.data.map( file => {
+                    return {
+                        uri: file.textDocument.uri,
+                        key: file.LUISAuthoringKey
+                    }
+                } )
+                this.documentsKeys.push(...keys)
+            }
+        })
     }
 
     start() {
@@ -245,10 +268,33 @@ export class JsonServer {
             this.cleanDiagnostics(document);
             return;
         }
-        const jsonDocument = this.getJSONDocument(document);
-        this.jsonService.doValidation(document, jsonDocument).then(diagnostics =>
-            this.sendDiagnostics(document, diagnostics)
-        );
+
+        // Look up documentsKeys for Luis info
+        // response diffrent diagnostics
+        
+        const luisKey = this.documentsKeys.find( item => item.uri === document.uri );
+
+        if(luisKey && luisKey.key === '') {
+            this.sendDiagnostics(document,  [{
+                message: "Empty LUIS KEY.",
+                range: {
+                    start: {
+                        line: 1,
+                        character: 1,
+                    },
+                    end: {
+                        line: 4,
+                        character: 1,
+                    }
+                },
+                severity: 1
+            }])
+        } else {
+            const jsonDocument = this.getJSONDocument(document);
+            this.jsonService.doValidation(document, jsonDocument).then(diagnostics =>
+                this.sendDiagnostics(document, diagnostics)
+            );
+        }
     }
 
     protected cleanDiagnostics(document: TextDocument): void {
