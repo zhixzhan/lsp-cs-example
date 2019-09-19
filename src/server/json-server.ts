@@ -14,8 +14,6 @@ import {
 import { TextDocumentPositionParams, DocumentRangeFormattingParams, ExecuteCommandParams, CodeActionParams, FoldingRangeRequestParam, DocumentColorParams, ColorPresentationParams } from 'vscode-languageserver-protocol';
 import { getLanguageService, LanguageService, JSONDocument } from "vscode-json-languageservice";
 
-import { debounce } from 'lodash';
-
 export function start(reader: MessageReader, writer: MessageWriter): JsonServer {
     const connection = createConnection(reader, writer);
     const server = new JsonServer(connection);
@@ -36,7 +34,7 @@ export class JsonServer {
 
     protected readonly documents = new TextDocuments();
 
-    protected documentsKeys: DocumentKeys[] = [];
+    protected documentLuisKeys: DocumentKeys[] = [];
 
     protected readonly jsonService: LanguageService = getLanguageService({
         schemaRequestService: this.resovleSchema.bind(this)
@@ -121,7 +119,14 @@ export class JsonServer {
                         key: file.LUISAuthoringKey
                     }
                 } )
-                this.documentsKeys.push(...keys)
+                this.documentLuisKeys.push(...keys)
+
+                // run diagnostic
+                this.documentLuisKeys.forEach( item => {
+                    const document = this.documents.get(item.uri);
+                    this.doValidate(document);
+                })
+                
             }
         })
     }
@@ -269,12 +274,15 @@ export class JsonServer {
             return;
         }
 
-        // Look up documentsKeys for Luis info
-        // response diffrent diagnostics
+        // Look up documentLuisKeys for Luis info
+        // if luisKey not set, dont do diagnosis
+        // if luisKey is empty, return `Empty LUIS KEY` error.
+        // if luisKey is valid, return correct diagnostics
         
-        const luisKey = this.documentsKeys.find( item => item.uri === document.uri );
+        const luisKey = this.documentLuisKeys.find( item => item.uri === document.uri );
+        if (!luisKey) return;
 
-        if(luisKey && luisKey.key === '') {
+        if(luisKey.key === '') {
             this.sendDiagnostics(document,  [{
                 message: "Empty LUIS KEY.",
                 range: {
